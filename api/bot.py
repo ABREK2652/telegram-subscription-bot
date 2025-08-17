@@ -9,7 +9,7 @@ import asyncio
 import os
 
 # --- Настройки через переменные окружения ---
-TOKEN = os.environ.get("TOKEN")  # Вставь токен в Vercel ENV
+TOKEN = os.environ.get("123456789:ABCdefGhIJKlmNoPQRstuVWXyz")  # Вставь токен в Vercel ENV
 CHAT_ID = int(os.environ.get("CHAT_ID", -1002863526087))
 ADMIN_ID = int(os.environ.get("ADMIN_ID", 634560479))
 
