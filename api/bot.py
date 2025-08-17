@@ -1,34 +1,35 @@
 from flask import Flask, request
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ContextTypes, filters
-)
-import datetime
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 import asyncio
 import os
+import datetime
 
-# --- Настройки через переменные окружения ---
-TOKEN = os.environ.get("TOKEN")  # Токен бота из Vercel ENV
+# ----------------- ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ -----------------
+TOKEN = os.environ.get("TOKEN")  # Token Telegram бота (Vercel ENV)
 CHAT_ID = int(os.environ.get("CHAT_ID", -1002863526087))
 ADMIN_ID = int(os.environ.get("ADMIN_ID", 634560479))
 
+if not TOKEN:
+    raise RuntimeError("⚠️ TOKEN не задан в Environment Variables!")
+
+# ----------------- СТЕЙТЫ ПОЛЬЗОВАТЕЛЕЙ -----------------
 user_states = {}  # {user_id: state}
 
-# --- Flask приложение ---
+# ----------------- Flask приложение -----------------
 app = Flask(__name__)
 
-# --- Telegram Application ---
+# ----------------- Telegram Application -----------------
 application = Application.builder().token(TOKEN).build()
 
-# --- Вспомогательные функции ---
+# ----------------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ -----------------
 def get_user_link(user):
     if user.username:
         return f"@{user.username}"
     else:
         return f"<a href='tg://user?id={user.id}'>{user.first_name}</a>"
 
-# --- Команды и обработчики ---
+# ----------------- КОМАНДЫ -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("💳 1000 ₽ — 1 месяц", callback_data="plan_1000_1")],
@@ -47,21 +48,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def select_plan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    parts = query.data.split("_")
-    price = parts[1]
-    months = parts[2]
+    price, months = query.data.split("_")[1], query.data.split("_")[2]
     user_id = query.from_user.id
     user_states[user_id] = {"state": "waiting_screenshot", "plan": f"{price}₽ / {months} мес."}
-    await query.message.reply_text(
-        f"📷 Отправьте скриншот оплаты тарифа {price}₽ за {months} мес."
-    )
-
-async def paid_pressed(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    user_states[user_id] = "waiting_screenshot"
-    await query.message.reply_text("📷 Отправьте скриншот оплаты (фото или документ).")
+    await query.message.reply_text(f"📷 Отправьте скриншот оплаты тарифа {price}₽ за {months} мес.")
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -122,29 +112,20 @@ async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if admin_msg_id:
         await context.bot.delete_message(chat_id=ADMIN_ID, message_id=admin_msg_id)
 
-# --- Регистрируем обработчики ---
+# ----------------- РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ -----------------
 application.add_handler(CommandHandler("start", start))
-application.add_handler(CallbackQueryHandler(paid_pressed, pattern="^paid$"))
+application.add_handler(CallbackQueryHandler(select_plan, pattern="^plan_"))
 application.add_handler(CallbackQueryHandler(approve, pattern="^approve_"))
 application.add_handler(CallbackQueryHandler(reject, pattern="^reject_"))
 application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_file))
-application.add_handler(CallbackQueryHandler(select_plan, pattern="^plan_"))
 
-# --- Flask serverless routes ---
+# ----------------- FLASK SERVERLESS -----------------
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    try:
-        data = request.get_json(force=True)
-        update = Update.de_json(data, application.bot)
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.create_task(application.process_update(update))
-
-        return "ok"
-    except Exception as e:
-        print("Webhook error:", e)
-        return "error", 500
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
+    asyncio.get_event_loop().create_task(application.process_update(update))
+    return "ok"
 
 @app.route("/")
 def home():
