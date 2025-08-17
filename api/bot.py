@@ -120,7 +120,7 @@ application.add_handler(CallbackQueryHandler(reject, pattern="^reject_"))
 application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_file))
 
 # ----------------- FLASK SERVERLESS -----------------
-@app.route(f"/{TOKEN}", methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, application.bot)
