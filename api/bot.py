@@ -9,7 +9,7 @@ import asyncio
 import os
 
 # --- Настройки через переменные окружения ---
-TOKEN = os.environ.get("TOKEN")  # Вставь токен в Vercel ENV
+TOKEN = os.environ.get("TOKEN")  # Токен бота из Vercel ENV
 CHAT_ID = int(os.environ.get("CHAT_ID", -1002863526087))
 ADMIN_ID = int(os.environ.get("ADMIN_ID", 634560479))
 
@@ -21,14 +21,12 @@ app = Flask(__name__)
 # --- Telegram Application ---
 application = Application.builder().token(TOKEN).build()
 
-
 # --- Вспомогательные функции ---
 def get_user_link(user):
     if user.username:
         return f"@{user.username}"
     else:
         return f"<a href='tg://user?id={user.id}'>{user.first_name}</a>"
-
 
 # --- Команды и обработчики ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -46,7 +44,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
 async def select_plan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -59,14 +56,12 @@ async def select_plan(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📷 Отправьте скриншот оплаты тарифа {price}₽ за {months} мес."
     )
 
-
 async def paid_pressed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
     user_states[user_id] = "waiting_screenshot"
     await query.message.reply_text("📷 Отправьте скриншот оплаты (фото или документ).")
-
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -100,7 +95,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_states[user_id] = None
         user_states[f"admin_msg_{user_id}"] = msg.message_id
 
-
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -118,7 +112,6 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if admin_msg_id:
         await context.bot.delete_message(chat_id=ADMIN_ID, message_id=admin_msg_id)
 
-
 async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -129,7 +122,6 @@ async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if admin_msg_id:
         await context.bot.delete_message(chat_id=ADMIN_ID, message_id=admin_msg_id)
 
-
 # --- Регистрируем обработчики ---
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(paid_pressed, pattern="^paid$"))
@@ -138,15 +130,21 @@ application.add_handler(CallbackQueryHandler(reject, pattern="^reject_"))
 application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_file))
 application.add_handler(CallbackQueryHandler(select_plan, pattern="^plan_"))
 
-
 # --- Flask serverless routes ---
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
-    asyncio.get_event_loop().create_task(application.process_update(update))
-    return "ok"
+    try:
+        data = request.get_json(force=True)
+        update = Update.de_json(data, application.bot)
 
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.create_task(application.process_update(update))
+
+        return "ok"
+    except Exception as e:
+        print("Webhook error:", e)
+        return "error", 500
 
 @app.route("/")
 def home():
